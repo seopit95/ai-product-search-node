@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node openAi.js"
   },
   "repository": {
     "type": "git",
@@ -13,12 +15,14 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/seopit95/ai-product-search-node/issues"
   },
   "homepage": "https://github.com/seopit95/ai-product-search-node#readme",
   "dependencies": {
-    "@qdrant/js-client-rest": "^1.16.2"
+    "@qdrant/js-client-rest": "^1.16.2",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "openai": "^6.16.0"
   }
 }
