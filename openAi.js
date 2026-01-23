@@ -1,9 +1,14 @@
 import "dotenv/config";
 import OpenAI from "openai";
 import express from "express";
+import cors from "cors";
 
 const app = express();
 app.use(express.json());
+app.use(cors());
+
+// ⭐ public 폴더를 정적 파일로 노출
+app.use(express.static("public"));
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
