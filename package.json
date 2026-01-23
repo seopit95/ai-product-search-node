@@ -2,12 +2,12 @@
   "name": "ai-product-search-node",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "public/index.js",
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js",
-    "dev": "light-server -s public -p 5500"
+    "start": "node server.js",
+    "dev": "light-server -s public -p 3000"
   },
   "repository": {
     "type": "git",

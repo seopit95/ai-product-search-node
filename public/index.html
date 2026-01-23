@@ -108,7 +108,7 @@
 
     <div class="chat-input">
         <input
-                id="input"
+                id="message"
                 type="text"
                 placeholder="메시지를 입력하세요"
         />
@@ -118,7 +118,7 @@
 
 <script>
   const messagesEl = document.getElementById("messages");
-  const inputEl = document.getElementById("input");
+  const inputEl = document.getElementById("message");
   const sendBtn = document.getElementById("sendBtn");
 
   function addMessage(text, sender) {
@@ -136,14 +136,17 @@
     addMessage(text, "user");
     inputEl.value = "";
     sendBtn.disabled = true;
+    console.log(text)
+
+    return;
 
     try {
-      const res = await fetch("http://localhost:3000/chat", {
+      const res = await fetch("/chat", {   // ⭐ localhost 제거
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message: text })
+        body: JSON.stringify({ message: text }),
       });
 
       const data = await res.json();
@@ -155,12 +158,15 @@
     }
   }
 
-  sendBtn.addEventListener("click", sendMessage);
+  // sendBtn.addEventListener("click", sendMessage);
 
-  inputEl.addEventListener("keydown", (e) => {
+  inputEl.removeEventListener("keydown", handleEnter); // 기존 제거
+  inputEl.addEventListener("keydown", handleEnter);
+
+  function handleEnter(e) {
     if (e.key === "Enter") sendMessage();
-  });
+  }
 </script>
-<script src="../index.js"></script>
+<script type="module" src="/index.js"></script>
 </body>
 </html>
