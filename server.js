@@ -25,10 +25,11 @@ async function analyzeQuery(userMessage) {
   const prompt = `
 너는 쇼핑몰 검색엔진의 쿼리 분석기다.
 
-사용자의 질문을 보고 아래 JSON 형태로 변환해라.
-반드시 아래 JSON 스키마를 따라라:
+사용자의 질문을 분석해서 아래 JSON으로 변환해라.
+
+JSON 스키마:
 {
-  "search_text": string,
+  "semantic_query": string,
   "filters": {
     "max_price": number | null,
     "min_price": number | null,
@@ -39,12 +40,20 @@ async function analyzeQuery(userMessage) {
 }
 
 규칙:
-- search_text: 벡터 검색에 사용할 자연어 문장 (1문장)
-- filters: 가격, 브랜드, 카테고리 등 명확한 조건
-- must_not: 제외 조건 (없으면 빈 배열)
-- intent: 사용 목적 요약
+- semantic_query:
+  - 사용자가 말한 표현과 의미를 최대한 유지한다
+  - 검색에 도움이 되도록 의미를 자연스럽게 보강한다
+  - 반드시 한 문장일 필요는 없다
+  - 사용자가 언급하지 않은 정보는 억지로 추가하지 마라
+  - 질문에서 사용자가 원하는 니즈에 맞는 키워드를 우선적으로 고려해 신발을 추천한다.
 
-JSON 외의 다른 말은 절대 하지 마라.
+- filters:
+  - 확실한 조건만 추출
+  - 애매하면 null
+- intent:
+  - 사용자의 실제 목적을 한 문장으로 요약한다
+
+JSON 외의 말은 절대 출력하지 마라.
 
 사용자 질문:
 "${userMessage}"
@@ -59,30 +68,33 @@ JSON 외의 다른 말은 절대 하지 마라.
     temperature: 0,
   });
 
-  return JSON.parse(response.choices[0].message.content);
+  return { content: JSON.parse(response.choices[0].message.content), usage: response.usage };
 }
 
 function buildQdrantFilter(filters) {
   const must = [];
 
-  if (filters.max_price) {
-    must.push({
-      key: "price",
-      range: { lte: filters.max_price },
-    });
-  }
-
   if (filters.brand) {
     must.push({
       key: "brand",
-      match: { value: filters.brand },
+      match: { value: filters.brand }
     });
   }
 
-  if (filters.category) {
+  if (filters.category && filters.category !== "신발") {
     must.push({
       key: "category",
-      match: { value: filters.category },
+      match: { value: filters.category }
+    });
+  }
+
+  if (filters.min_price || filters.max_price) {
+    must.push({
+      key: "price",
+      range: {
+        gte: filters.min_price ?? undefined,
+        lte: filters.max_price ?? undefined,
+      }
     });
   }
 
@@ -92,27 +104,27 @@ function buildQdrantFilter(filters) {
 app.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
-
     // 1. 니즈 분석
-    const analyzed = await analyzeQuery(message);
-    const { search_text, filters } = analyzed;
+    const { content: analyzed, usage } = await analyzeQuery(message);
+    const { semantic_query, filters } = analyzed;
 
     // 2. 임베딩 (1회)
     const embedding = await client.embeddings.create({
       model: "text-embedding-3-small",
-      input: search_text,
+      input: semantic_query,
     });
 
     // 3. Qdrant 검색
     const result = await qdrant.search("test_products", {
       vector: embedding.data[0].embedding,
-      limit: 10,
+      limit: 5,
       filter: buildQdrantFilter(filters),
     });
 
     res.json({
       analyzed,
       result,
+      usage: embedding.usage
     });
   } catch (e) {
     console.error(e);
@@ -122,19 +134,19 @@ app.post("/chat", async (req, res) => {
 
 // 임베딩
 
-app.post("/embedding", async (req, res) => {
-  try {
-    console.log(req)
-    return;
-    const embeddings = await openai.embeddings.create({
-      model: "text-embedding-3-small",
-      input: texts
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "AI 호출 실패" });
-  }
-});
+// app.post("/embedding", async (req, res) => {
+//   try {
+//     console.log(req)
+//     return;
+//     const embeddings = await openai.embeddings.create({
+//       model: "text-embedding-3-small",
+//       input: texts
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: "AI 호출 실패" });
+//   }
+// });
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
