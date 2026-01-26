@@ -1,19 +1,117 @@
-// public/main.js
-async function send() {
-  const msg = document.getElementById("msg").value;
+const messagesEl = document.getElementById("messages");
+const inputEl = document.getElementById("messageInput");
+const sendBtn = document.getElementById("sendBtn");
 
-  const res = await fetch("/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ message: msg }),
-  });
+function addMessage(data, sender) {
+  const div = document.createElement("div");
+  const div2 = document.createElement("div");
+  div.className = `message ${sender}`;
+  let text;
+  if (sender === 'bot') {
+    if (data.result.length > 0) {
+      text = `${data.analyzed.semantic_query}을 찾았습니다.\n`;
+      data.result.forEach((item, idx) => {
+        text += `
+      상품명: ${item.payload.name}
+      설명: ${item.payload.description}
+      가격: ${item.payload.price}
+      \n
+      `
+      })
+    } else {
+      text = `요청주신 정보의 상품은 없습니다.`
+    }
+  } else {
+    text = data;
+  }
+  div.innerText = text;
+  messagesEl.appendChild(div);
+  if (sender === 'bot') {
+    div2.innerText = `전체: ${data.usage.total_tokens} | 요청토큰: ${data.usage.prompt_tokens}`
+    messagesEl.appendChild(div2);
+    div2.style.fontSize = '9px';
+  }
 
-  const data = await res.json();
-
-  document.getElementById("result").textContent = data.reply;
+  messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-// HTML에서 onclick 쓰기 위해 노출
-window.send = send;
+async function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+
+  addMessage(text, "user");
+  inputEl.value = "";
+  sendBtn.disabled = true;
+
+  try {
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: text }),
+    });
+    document.querySelector('.reply_wait').remove();
+
+    const data = await res.json();
+    console.log(data)
+    addMessage(data || "응답이 없습니다.", "bot");
+  } catch (e) {
+    addMessage("서버와 통신할 수 없습니다.", "bot");
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
+inputEl.addEventListener("keydown", handleEnter);
+sendBtn.addEventListener("click", handleEnter);
+
+function handleEnter(e) {
+  if (e.isComposing) return;
+  if (e.key === "Enter") {
+    sendMessage();
+    sendBtn.disabled = true;
+
+    // 응답 중 표시
+    const loadingDiv = document.createElement("div");
+    loadingDiv.className = "message reply_wait";
+    loadingDiv.innerText = "응답 중…";
+    messagesEl.appendChild(loadingDiv);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+}
+const toggleBtn = document.getElementById('chatbot-toggle');
+const chatbot = document.getElementById('chatbot');
+const closeBtn = document.getElementById('closeChat');
+
+// 열기
+toggleBtn.addEventListener('click', (e) => {
+  e.stopPropagation(); // 바깥 클릭 방지
+  chatbot.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    chatbot.classList.add('active');
+  });
+});
+
+// 닫기 버튼
+closeBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeChat();
+});
+
+// 바깥 클릭 시 닫기
+document.addEventListener('click', (e) => {
+  if (!chatbot.classList.contains('active')) return;
+
+  // 챗봇 영역 안이면 무시
+  if (chatbot.contains(e.target)) return;
+
+  closeChat();
+});
+
+function closeChat() {
+  chatbot.classList.remove('active');
+  setTimeout(() => {
+    chatbot.classList.add('hidden');
+  }, 250);
+}
