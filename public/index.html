@@ -108,7 +108,7 @@
 
     <div class="chat-input">
         <input
-                id="message"
+                id="messageInput"
                 type="text"
                 placeholder="메시지를 입력하세요"
         />
@@ -118,7 +118,7 @@
 
 <script>
   const messagesEl = document.getElementById("messages");
-  const inputEl = document.getElementById("message");
+  const inputEl = document.getElementById("messageInput");
   const sendBtn = document.getElementById("sendBtn");
 
   function addMessage(text, sender) {
@@ -136,18 +136,16 @@
     addMessage(text, "user");
     inputEl.value = "";
     sendBtn.disabled = true;
-    console.log(text)
-
-    return;
 
     try {
-      const res = await fetch("/chat", {   // ⭐ localhost 제거
+      const res = await fetch("/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ message: text }),
       });
+      document.querySelector('.reply_wait').remove();
 
       const data = await res.json();
       addMessage(data.reply || "응답이 없습니다.", "bot");
@@ -158,13 +156,21 @@
     }
   }
 
-  // sendBtn.addEventListener("click", sendMessage);
-
-  inputEl.removeEventListener("keydown", handleEnter); // 기존 제거
   inputEl.addEventListener("keydown", handleEnter);
 
   function handleEnter(e) {
-    if (e.key === "Enter") sendMessage();
+    if (e.isComposing) return;
+    if (e.key === "Enter") {
+      sendMessage();
+      sendBtn.disabled = true;
+
+      // 응답 중 표시
+      const loadingDiv = document.createElement("div");
+      loadingDiv.className = "message reply_wait";
+      loadingDiv.innerText = "응답 중…";
+      messagesEl.appendChild(loadingDiv);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
   }
 </script>
 <script type="module" src="/index.js"></script>
