@@ -3,7 +3,7 @@ import { qdrant } from "./qdrant.js";
 async function createCollection() {
   await qdrant.createCollection("test_products", {
     vectors: {
-      size: 3,
+      size: 1536,
       distance: "Cosine"
     }
   })
