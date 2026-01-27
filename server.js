@@ -45,7 +45,7 @@ JSON 스키마:
   - 검색에 도움이 되도록 의미를 자연스럽게 보강한다
   - 반드시 한 문장일 필요는 없다
   - 사용자가 언급하지 않은 정보는 억지로 추가하지 마라
-  - 질문에서 사용자가 원하는 니즈에 맞는 키워드를 우선적으로 고려해 신발을 추천한다.
+  - 질문에서 사용자가 원하는 니즈에 맞는 키워드를 우선적으로 고려해 상품을 조회해야한다.
 
 - filters:
   - 확실한 조건만 추출
@@ -68,6 +68,8 @@ JSON 외의 말은 절대 출력하지 마라.
     temperature: 0,
   });
 
+  console.log(JSON.parse(response.choices[0].message.content))
+
   return { content: JSON.parse(response.choices[0].message.content), usage: response.usage };
 }
 
@@ -81,12 +83,12 @@ function buildQdrantFilter(filters) {
     });
   }
 
-  if (filters.category && filters.category !== "신발") {
-    must.push({
-      key: "category",
-      match: { value: filters.category }
-    });
-  }
+  // if (filters.category) {
+  //   must.push({
+  //     key: "category",
+  //     match: { value: filters.category }
+  //   });
+  // }
 
   if (filters.min_price || filters.max_price) {
     must.push({
@@ -98,7 +100,7 @@ function buildQdrantFilter(filters) {
     });
   }
 
-  return must.length ? { must } : undefined;
+  return must.length > 0 ? { must } : undefined;
 }
 
 app.post("/chat", async (req, res) => {
@@ -114,16 +116,21 @@ app.post("/chat", async (req, res) => {
       input: semantic_query,
     });
 
+    console.log(buildQdrantFilter(filters))
+
     // 3. Qdrant 검색
     const result = await qdrant.search("test_products", {
       vector: embedding.data[0].embedding,
-      limit: 5,
+      limit: 1,
       filter: buildQdrantFilter(filters),
+      // score_threshold: 0.55,
+      with_payload: true,
     });
+    console.log(result);
 
     res.json({
       analyzed,
-      result,
+      result: result,
       usage: embedding.usage
     });
   } catch (e) {
