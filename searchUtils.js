@@ -1,13 +1,3 @@
-import { createRequire } from "module";
-
-const require = createRequire(import.meta.url);
-let openKoreanText = null;
-try {
-  openKoreanText = require("open-korean-text");
-} catch {
-  openKoreanText = null;
-}
-
 const BRAND_SYNONYMS = {
   "Lock&Lock": ["락앤락", "locknlock", "lock&lock"]
 };
@@ -77,35 +67,10 @@ function normalizeText(text) {
     .trim();
 }
 
-function tokenizeKorean(text) {
-  if (!openKoreanText || !text) return null;
-  try {
-    const normalized = openKoreanText.normalizeSync(text);
-    const tokensObj = openKoreanText.tokenizeSync(normalized);
-    const stemmed = openKoreanText.stemSync(tokensObj);
-    const tokens = stemmed?.tokens || tokensObj?.tokens || tokensObj;
-    if (!Array.isArray(tokens)) return null;
-    return tokens.map((t) => t.text || "").filter(Boolean);
-  } catch {
-    return null;
-  }
-}
-
 function tokenize(text) {
   if (!text) return [];
-  const tokenSet = new Set();
-  const basicTokens = normalizeText(text).split(" ");
-  basicTokens.forEach((t) => tokenSet.add(t));
-
-  const koreanTokens = tokenizeKorean(text);
-  if (koreanTokens) {
-    koreanTokens.forEach((t) => {
-      const n = normalizeText(t);
-      if (n) tokenSet.add(n);
-    });
-  }
-
-  return Array.from(tokenSet).filter((t) => {
+  const tokens = normalizeText(text).split(" ");
+  return tokens.filter((t) => {
     if (!t) return false;
     if (/[a-z0-9]/i.test(t) && t.length < 2) return false;
     return true;
