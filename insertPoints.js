@@ -5,13 +5,14 @@ dotenv.config();
 import { qdrant } from "./qdrant.js";
 import { dummyData } from "./dummyData.js";
 import OpenAI from "openai";
+import { buildDocumentText, buildSparseVector } from "./searchUtils.js";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 async function insertPoints() {
-  const texts = dummyData.map(item => buildEmbeddingText(item));
+  const texts = dummyData.map((item) => buildDocumentText(item));
 
   try {
     const embeddings = await client.embeddings.create({
@@ -21,8 +22,10 @@ async function insertPoints() {
 
     // 임베딩 데이터 각 포인트별 vector에 저장
     dummyData.forEach((data, idx) => {
-      data.vector = embeddings.data[idx].embedding;
-    })
+      const dense = embeddings.data[idx].embedding;
+      const sparse = buildSparseVector(texts[idx]);
+      data.vector = { dense, sparse };
+    });
   } catch (e) {
     console.log(e)
   }
@@ -32,15 +35,6 @@ async function insertPoints() {
   });
 
   console.log("포인트 저장 완료");
-}
-
-function buildEmbeddingText(item) {
-  return `
-    상품명: ${item.payload.name}
-    브랜드: ${item.payload.brand} 
-    설명: ${item.payload.description}
-    태그: ${item.payload.tags.join(" ")}
-  `.trim();
 }
 
 insertPoints();

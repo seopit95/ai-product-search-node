@@ -6,6 +6,12 @@ import express from "express";
 import cors from "cors";
 import OpenAI from "openai";
 import { qdrant } from "./qdrant.js";
+import {
+  buildQueryText,
+  buildSparseVector,
+  normalizeBrand,
+  normalizeCategory,
+} from "./searchUtils.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -68,8 +74,6 @@ JSON 외의 말은 절대 출력하지 마라.
     temperature: 0,
   });
 
-  console.log(JSON.parse(response.choices[0].message.content))
-
   return { content: JSON.parse(response.choices[0].message.content), usage: response.usage };
 }
 
@@ -83,12 +87,12 @@ function buildQdrantFilter(filters) {
     });
   }
 
-  // if (filters.category) {
-  //   must.push({
-  //     key: "category",
-  //     match: { value: filters.category }
-  //   });
-  // }
+  if (filters.category) {
+    must.push({
+      key: "category",
+      match: { value: filters.category }
+    });
+  }
 
   if (filters.min_price || filters.max_price) {
     must.push({
@@ -103,30 +107,79 @@ function buildQdrantFilter(filters) {
   return must.length > 0 ? { must } : undefined;
 }
 
+async function searchQdrant({ denseVector, sparseVector, filters }) {
+  const base = {
+    limit: 5,
+    score_threshold: 0.25,
+    with_payload: true,
+  };
+
+  const hasSparse = sparseVector?.indices?.length > 0;
+  const makePrefetch = (filter) => ([
+    {
+      query: { nearest: denseVector },
+      using: "dense",
+      limit: 50,
+      filter,
+    },
+    ...(hasSparse ? [{
+      query: { nearest: sparseVector },
+      using: "sparse",
+      limit: 50,
+      filter,
+    }] : []),
+  ]);
+
+  const runHybrid = async (filter) => qdrant.query("test_products", {
+    prefetch: makePrefetch(filter),
+    query: { fusion: "rrf" },
+    limit: base.limit,
+    score_threshold: base.score_threshold,
+    with_payload: true,
+    filter,
+  });
+
+  const strictFilter = buildQdrantFilter(filters);
+  const resultStrict = await runHybrid(strictFilter);
+  if (resultStrict?.length) return resultStrict;
+
+  const relaxed = { ...filters, brand: null };
+  const resultRelaxBrand = await runHybrid(buildQdrantFilter(relaxed));
+  if (resultRelaxBrand?.length) return resultRelaxBrand;
+
+  const relaxedCategory = { ...filters, category: null, brand: null };
+  const resultRelaxCategory = await runHybrid(buildQdrantFilter(relaxedCategory));
+  if (resultRelaxCategory?.length) return resultRelaxCategory;
+
+  return runHybrid(undefined);
+}
+
 app.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
     // 1. 니즈 분석
     const { content: analyzed, usage } = await analyzeQuery(message);
-    const { semantic_query, filters } = analyzed;
+    const { semantic_query } = analyzed;
+    const filters = {
+      ...analyzed.filters,
+      brand: normalizeBrand(analyzed.filters?.brand),
+      category: normalizeCategory(analyzed.filters?.category),
+    };
 
     // 2. 임베딩 (1회)
+    const queryText = buildQueryText({ semantic_query, filters, userMessage: message });
     const embedding = await client.embeddings.create({
       model: "text-embedding-3-small",
-      input: semantic_query,
+      input: queryText,
     });
-
-    console.log(buildQdrantFilter(filters))
+    const sparseVector = buildSparseVector(queryText);
 
     // 3. Qdrant 검색
-    const result = await qdrant.search("test_products", {
-      vector: embedding.data[0].embedding,
-      limit: 1,
-      filter: buildQdrantFilter(filters),
-      // score_threshold: 0.55,
-      with_payload: true,
+    const result = await searchQdrant({
+      denseVector: embedding.data[0].embedding,
+      sparseVector,
+      filters,
     });
-    console.log(result);
 
     res.json({
       analyzed,

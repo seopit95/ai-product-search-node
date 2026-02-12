@@ -6,8 +6,6 @@ async function search() {
     vector: [0.88, 0.12, 0.1], // "레드 신발" 같은 의미
     limit: 1
   });
-
-  console.log(result);
 }
 
 search();

@@ -8,15 +8,16 @@ function addMessage(data, sender) {
   div.className = `message ${sender}`;
   let text;
   if (sender === 'bot') {
-    if (data.result.length > 0) {
-      text = `${data.analyzed.semantic_query}을 찾았습니다.\n`;
-      data.result.forEach((item, idx) => {
+    if (data.result && data.result.points.length > 0) {
+      // text = `${data.analyzed.semantic_query}을 찾았습니다.\n`;
+      data.result.points.forEach((item, idx) => {
+        console.log(item)
         text += `
       상품명: ${item.payload.name}
       설명: ${item.payload.description}
       가격: ${item.payload.price}
       \n
-      `
+      `;
       })
     } else {
       text = `요청주신 정보의 상품은 없습니다.`
@@ -54,10 +55,9 @@ async function sendMessage() {
     document.querySelector('.reply_wait').remove();
 
     const data = await res.json();
-    console.log(data)
     addMessage(data || "응답이 없습니다.", "bot");
   } catch (e) {
-    addMessage("서버와 통신할 수 없습니다.", "bot");
+    throw new Error("서버와 통신할 수 없습니다.");
   } finally {
     sendBtn.disabled = false;
   }
@@ -84,13 +84,14 @@ const toggleBtn = document.getElementById('chatbot-toggle');
 const chatbot = document.getElementById('chatbot');
 const closeBtn = document.getElementById('closeChat');
 
-// 열기
+// 토글 열기/닫기
 toggleBtn.addEventListener('click', (e) => {
   e.stopPropagation(); // 바깥 클릭 방지
-  chatbot.classList.remove('hidden');
-  requestAnimationFrame(() => {
-    chatbot.classList.add('active');
-  });
+  if (chatbot.classList.contains('active')) {
+    closeChat();
+    return;
+  }
+  openChat();
 });
 
 // 닫기 버튼
@@ -114,4 +115,11 @@ function closeChat() {
   setTimeout(() => {
     chatbot.classList.add('hidden');
   }, 250);
+}
+
+function openChat() {
+  chatbot.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    chatbot.classList.add('active');
+  });
 }
