@@ -1,7 +1,10 @@
 const messagesEl = document.getElementById("messages");
 const inputEl = document.getElementById("messageInput");
 const sendBtn = document.getElementById("sendBtn");
-
+const initChatDiv = document.createElement("div");
+initChatDiv.className = 'message bot';
+initChatDiv.innerText = '뭐 찾아줄까?';
+messagesEl.appendChild(initChatDiv);
 function addMessage(data, sender) {
   const div = document.createElement("div");
   const div2 = document.createElement("div");

@@ -6,18 +6,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap');
         * {
             box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: "Manrope", "Space Grotesk", sans-serif;
         }
 
         body {
             margin: 0;
-            background: #f5f5f5;
+            background:
+                    radial-gradient(1200px 800px at 10% 10%, rgba(56, 189, 248, 0.18), transparent 60%),
+                    radial-gradient(1000px 700px at 90% 20%, rgba(148, 163, 184, 0.25), transparent 60%),
+                    radial-gradient(900px 600px at 50% 90%, rgba(226, 232, 240, 0.7), transparent 55%),
+                    linear-gradient(180deg, #f8fafc 0%, #eef2f7 45%, #e2e8f0 100%);
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: -20%;
+            background:
+                    repeating-linear-gradient(
+                            135deg,
+                            rgba(15, 23, 42, 0.04) 0px,
+                            rgba(15, 23, 42, 0.04) 1px,
+                            transparent 1px,
+                            transparent 12px
+                    );
+            opacity: 0.35;
+            pointer-events: none;
+            transform: rotate(-2deg);
         }
 
         .chat-container {
@@ -165,6 +188,66 @@
             transform-style: preserve-3d;
         }
 
+        .chatbot-hint {
+            position: absolute;
+            right: 85px;
+            bottom: 30px;
+            padding: 12px 18px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,245,249,0.9));
+            color: #0f172a;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            border-radius: 18px;
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: -0.2px;
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255,255,255,0.9);
+            backdrop-filter: blur(12px);
+            white-space: nowrap;
+            opacity: 0;
+            transform: translateY(0) translateX(0);
+            animation: hintSwap 8s infinite;
+            pointer-events: none;
+        }
+
+        .chatbot-hint.hint-1 {
+            animation-delay: 0s;
+        }
+
+        .chatbot-hint.hint-2 {
+            animation-delay: 4s;
+        }
+
+        .chatbot-hint::after {
+            content: "";
+            position: absolute;
+            right: -10px;
+            bottom: 6px;
+            width: 18px;
+            height: 18px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,245,249,0.9));
+            border-right: 1px solid rgba(226, 232, 240, 0.95);
+            border-bottom: 1px solid rgba(226, 232, 240, 0.95);
+            border-bottom-right-radius: 4px;
+            clip-path: polygon(0 0, 100% 50%, 0 100%);
+        }
+
+        @keyframes hintSwap {
+            0% { opacity: 0; transform: translateY(4px) translateX(0); }
+            10% { opacity: 1; transform: translateY(0) translateX(-2px); }
+            40% { opacity: 1; transform: translateY(-4px) translateX(-4px); }
+            50% { opacity: 0; transform: translateY(-8px) translateX(-6px); }
+            100% { opacity: 0; }
+        }
+
+        @media (max-width: 720px) {
+            .chatbot-hint {
+                right: 82px;
+                bottom: 52px;
+                font-size: 13px;
+                padding: 10px 14px;
+            }
+        }
+
         .chatbot-icon svg .eye {
             transition: transform 0.08s ease-out;
             transform-origin: center;
@@ -202,51 +285,189 @@
             box-shadow: 0 20px 40px rgba(0,0,0,0.2);
             z-index: 1000;
         }
-        .page-title {
-            position: absolute;
-            top: 40%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
+        .hero {
+            position: relative;
+            width: min(860px, 92vw);
+            padding: 36px 44px;
+            border-radius: 28px;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            box-shadow: 0 25px 60px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255,255,255,0.9);
+            backdrop-filter: blur(12px);
         }
 
-        .page-title .title {
-            font-size: 60px;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            color: #111827;
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(14, 165, 233, 0.12);
+            color: #0f172a;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.2px;
         }
 
-        .page-title .subtitle {
-            margin-top: 8px;
-            font-size: 25px;
-            color: #6b7280;
+        .hero-title {
+            margin: 16px 0 10px;
+            font-size: clamp(36px, 5vw, 45px);
+            font-weight: 700;
+            letter-spacing: -0.6px;
+            color: #0f172a;
         }
 
-        .page-title .title {
-            background: linear-gradient(135deg, #2563eb, #1e40af);
+        .hero-title span {
+            background: linear-gradient(135deg, #0ea5e9, #1d4ed8);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        .page-title {
-            animation: float 2s ease-in-out infinite;
+
+        .hero-sub {
+            margin: 0 0 22px;
+            font-size: 18px;
+            color: #475569;
+            line-height: 1.6;
         }
 
-        @keyframes float {
-            0%, 100% { transform: translate(-50%, -50%) translateY(0); }
-            50% { transform: translate(-50%, -50%) translateY(-6px); }
+        .hero-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+
+        .hero-card {
+            padding: 16px;
+            border-radius: 18px;
+            background: rgba(248, 250, 252, 0.9);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+        }
+
+        .hero-card h3 {
+            margin: 0 0 8px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .hero-card p {
+            margin: 0;
+            font-size: 13px;
+            color: #475569;
+            line-height: 1.5;
+        }
+
+        .hero-list {
+            margin: 16px 0 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            gap: 8px;
+        }
+
+        .hero-list li {
+            font-size: 14px;
+            color: #334155;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(226, 232, 240, 0.6);
+        }
+
+        .hero-steps {
+            margin-top: 18px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .hero-step {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.8);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        .hero-step span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+            color: white;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .hero-step p {
+            margin: 0;
+            font-size: 14px;
+            color: #334155;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 720px) {
+            .hero {
+                padding: 28px 24px;
+            }
+            .hero-sub {
+                font-size: 16px;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div class="page-title">
-        <div class="title">AI 상담 도우미</div>
-        <div class="subtitle">빠르고 친절하게 도와드릴게요</div>
-    </div>
+    <main class="hero">
+        <div class="hero-badge">AI 상담 기반 상품 추천</div>
+        <div class="hero-title">AI 상담 도우미로 <span>맞춤 상품</span>을 찾아보세요</div>
+        <p class="hero-sub">대화를 통해 고객의 니즈를 분석하고, 브랜드·카테고리·가격 조건까지 정리한 뒤 가장 관련성 높은 상품을 제안합니다. 검색 정확도를 높이기 위해 의미 검색과 키워드 검색을 함께 사용합니다.</p>
+
+        <div class="hero-grid">
+            <div class="hero-card">
+                <h3>니즈 파악</h3>
+                <p>자연어 질문에서 의도와 조건을 추출해 상담 흐름을 정리합니다.</p>
+            </div>
+            <div class="hero-card">
+                <h3>하이브리드 검색</h3>
+                <p>의미 기반 + 키워드 기반 검색을 융합해 정확도를 높입니다.</p>
+            </div>
+            <div class="hero-card">
+                <h3>즉시 추천</h3>
+                <p>필터를 단계적으로 적용해 가장 관련성 높은 상품을 제공합니다.</p>
+            </div>
+        </div>
+
+        <ul class="hero-list">
+            <li>브랜드/카테고리/가격 조건을 자동으로 정리합니다.</li>
+            <li>신규 상품이 추가되어도 검색 품질을 유지합니다.</li>
+            <li>챗봇 버튼을 눌러 바로 상담을 시작할 수 있습니다.</li>
+        </ul>
+
+        <div class="hero-steps">
+            <div class="hero-step">
+                <span>01</span>
+                <p>질문을 입력하면 AI가 의도와 조건을 분석합니다.</p>
+            </div>
+            <div class="hero-step">
+                <span>02</span>
+                <p>하이브리드 검색으로 관련도 높은 후보를 찾습니다.</p>
+            </div>
+            <div class="hero-step">
+                <span>03</span>
+                <p>가장 적합한 상품을 우선 순위로 제안합니다.</p>
+            </div>
+        </div>
+    </main>
 <!-- 챗봇 버튼 -->
 <!-- 플로팅 챗봇 버튼 -->
 <div id="chatbot-toggle" class="chatbot-fab">
+    <div class="chatbot-hint hint-1">검색은 내가 한다. 넌 말만 해.</div>
+    <div class="chatbot-hint hint-2">원하는 거? 내가 찾는 건 일도 아니지.</div>
     <div class="chatbot-icon" aria-hidden="true">
         <svg viewBox="0 0 64 64" role="img" focusable="false">
             <defs>
