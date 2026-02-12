@@ -24,9 +24,12 @@
             width: 100%;
             max-width: 420px;
             height: 600px;
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            background: #f8fafc;
+            border-radius: 14px;
+            border: 1px solid #e2e8f0;
+            box-shadow:
+                    0 18px 40px rgba(15, 23, 42, 0.16),
+                    inset 0 1px 0 rgba(255,255,255,0.7);
             display: flex;
             flex-direction: column;
             overflow: hidden;
@@ -34,17 +37,18 @@
 
         .chat-header {
             padding: 14px;
-            background: #111827;
-            color: white;
+            background: linear-gradient(135deg, #ffffff, #e2e8f0);
+            color: #0f172a;
             font-weight: 600;
             text-align: center;
+            border-bottom: 1px solid #e2e8f0;
         }
 
         .chat-messages {
             flex: 1;
             padding: 16px;
             overflow-y: auto;
-            background: #f9fafb;
+            background: radial-gradient(circle at 20% 0%, #ffffff 0%, #f1f5f9 60%, #e2e8f0 100%);
         }
 
         .message {
@@ -59,21 +63,22 @@
 
         .message.user {
             margin-left: auto;
-            background: #2563eb;
+            background: linear-gradient(135deg, #38bdf8, #0ea5e9);
             color: white;
             border-bottom-right-radius: 4px;
         }
 
         .message.bot {
             margin-right: auto;
-            background: #e5e7eb;
-            color: #111;
+            background: #e2e8f0;
+            color: #0f172a;
             border-bottom-left-radius: 4px;
         }
 
         .chat-input {
             display: flex;
-            border-top: 1px solid #e5e7eb;
+            border-top: 1px solid #e2e8f0;
+            background: #ffffff;
         }
 
         .chat-input input {
@@ -87,7 +92,7 @@
         .chat-input button {
             border: none;
             padding: 0 20px;
-            background: #2563eb;
+            background: linear-gradient(135deg, #38bdf8, #0ea5e9);
             color: white;
             font-weight: 600;
             cursor: pointer;
@@ -129,26 +134,40 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            padding: 14px 18px;
-            background: linear-gradient(135deg, #2563eb, #1e40af);
+            padding: 0;
+            background: transparent;
             color: white;
             border-radius: 28px;
-            box-shadow:
-                    0 10px 25px rgba(37, 99, 235, 0.35),
-                    0 4px 10px rgba(0,0,0,0.15);
             cursor: pointer;
             z-index: 1000;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
         .chatbot-icon {
-            width: 42px;
-            height: 42px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 50%;
+            width: 72px;
+            height: 72px;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 22px;
+            border-radius: 16px;
+            filter: drop-shadow(0 8px 12px rgba(0,0,0,0.25));
+            perspective: 500px;
+        }
+
+        .chatbot-icon svg {
+            width: 72px;
+            height: 72px;
+            display: block;
+        }
+
+        .chatbot-icon svg .face {
+            transition: transform 0.08s ease-out;
+            transform-origin: 32px 32px;
+            transform-style: preserve-3d;
+        }
+
+        .chatbot-icon svg .eye {
+            transition: transform 0.08s ease-out;
+            transform-origin: center;
         }
         .chatbot-text {
             display: flex;
@@ -167,9 +186,7 @@
         }
         .chatbot-fab:hover {
             transform: translateY(-2px);
-            box-shadow:
-                    0 14px 30px rgba(37, 99, 235, 0.45),
-                    0 6px 14px rgba(0,0,0,0.2);
+            box-shadow: none;
         }
 
         .chatbot-fab:active {
@@ -230,17 +247,67 @@
 <!-- 챗봇 버튼 -->
 <!-- 플로팅 챗봇 버튼 -->
 <div id="chatbot-toggle" class="chatbot-fab">
-    <div class="chatbot-icon">🤖</div>
-    <div class="chatbot-text">
-        <div class="title">AI 상담</div>
-        <div class="sub">무엇이든 물어보세요</div>
+    <div class="chatbot-icon" aria-hidden="true">
+        <svg viewBox="0 0 64 64" role="img" focusable="false">
+            <defs>
+                <linearGradient id="g-front" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#ffffff"/>
+                    <stop offset="50%" stop-color="#e5e7eb"/>
+                    <stop offset="100%" stop-color="#cbd5e1"/>
+                </linearGradient>
+                <linearGradient id="g-side" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#9ca3af"/>
+                    <stop offset="100%" stop-color="#6b7280"/>
+                </linearGradient>
+                <radialGradient id="g-highlight" cx="30%" cy="25%" r="70%">
+                    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9"/>
+                    <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+                </radialGradient>
+            </defs>
+
+            <g class="face">
+                <!-- 3D G shadow/side -->
+                <path fill="url(#g-side)" fill-rule="evenodd" transform="translate(3 3)"
+                      d="M32 10
+                         A22 22 0 1 1 31.9 10
+                         M32 20
+                         A12 12 0 1 0 32 44
+                         A12 12 0 1 0 32 20"/>
+
+                <!-- 3D G front -->
+                <path fill="url(#g-front)" fill-rule="evenodd"
+                      d="M32 10
+                         A22 22 0 1 1 31.9 10
+                         M32 20
+                         A12 12 0 1 0 32 44
+                         A12 12 0 1 0 32 20"/>
+
+                <!-- G opening + bar -->
+                <rect x="40" y="20" width="16" height="24" fill="#0f172a" opacity="0.08"/>
+                <rect x="34" y="32" width="18" height="7" rx="3.5" fill="url(#g-front)"/>
+
+                <!-- Robot eyes -->
+                <g class="eye" id="eye-left">
+                    <circle cx="26.5" cy="27.5" r="4.1" fill="#0ea5e9" opacity="0.85"/>
+                    <circle cx="26.5" cy="27.5" r="1.6" fill="#ffffff" opacity="0.9"/>
+                </g>
+                <g class="eye" id="eye-right">
+                    <circle cx="35.5" cy="27.5" r="4.1" fill="#0ea5e9" opacity="0.85"/>
+                    <circle cx="35.5" cy="27.5" r="1.6" fill="#ffffff" opacity="0.9"/>
+                </g>
+                <rect x="26.5" y="35.5" width="12" height="3.2" rx="1.6" fill="#64748b" opacity="0.7"/>
+
+                <!-- highlight -->
+                <circle cx="26" cy="20" r="16" fill="url(#g-highlight)"/>
+            </g>
+        </svg>
     </div>
 </div>
 
 <!-- 챗봇 컨테이너 -->
 <div id="chatbot" class="chat-container hidden">
     <div class="chat-header">
-        🤖 AI 챗봇
+        AI 챗봇
         <span id="closeChat">✕</span>
     </div>
 
@@ -257,7 +324,38 @@
 </div>
 
 <script>
+    const chatbotToggle = document.getElementById('chatbot-toggle');
+    const face = chatbotToggle?.querySelector('.face');
+    const eyeLeft = chatbotToggle?.querySelector('#eye-left');
+    const eyeRight = chatbotToggle?.querySelector('#eye-right');
 
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+        const updateEyes = (clientX, clientY) => {
+        if (!face || !eyeLeft || !eyeRight) return;
+            const rect = chatbotToggle.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+
+            const dx = clamp((clientX - cx) / 40, -1, 1);
+            const dy = clamp((clientY - cy) / 40, -1, 1);
+
+        const eyeOffsetX = dx * 3.2;
+        const eyeOffsetY = dy * 3.0;
+        const faceTiltX = dy * -6;
+        const faceTiltY = dx * 6;
+        const faceDepth = 6;
+
+        eyeLeft.style.transform = `translate(${eyeOffsetX}px, ${eyeOffsetY}px)`;
+        eyeRight.style.transform = `translate(${eyeOffsetX}px, ${eyeOffsetY}px)`;
+        face.style.transform = `rotateX(${faceTiltX}deg) rotateY(${faceTiltY}deg) translateZ(${faceDepth}px)`;
+    };
+
+    window.addEventListener('mousemove', (e) => updateEyes(e.clientX, e.clientY));
+    window.addEventListener('touchmove', (e) => {
+        const t = e.touches[0];
+        if (t) updateEyes(t.clientX, t.clientY);
+    }, { passive: true });
 </script>
 <script type="module" src="/index.js"></script>
 </body>
