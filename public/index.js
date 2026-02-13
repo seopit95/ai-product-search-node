@@ -6,34 +6,36 @@ initChatDiv.className = 'message bot';
 initChatDiv.innerText = '뭐 찾아줄까?';
 messagesEl.appendChild(initChatDiv);
 function addMessage(data, sender) {
-  const div = document.createElement("div");
   const div2 = document.createElement("div");
-  div.className = `message ${sender}`;
-  let text;
   if (sender === 'bot') {
-    if (data.result && data.result.points.length > 0) {
-      // text = `${data.analyzed.semantic_query}을 찾았습니다.\n`;
-      data.result.points.forEach((item, idx) => {
-        console.log(item)
-        text += `
-      상품명: ${item.payload.name}
-      설명: ${item.payload.description}
-      가격: ${item.payload.price}
-      \n
-      `;
-      })
+    const items = Array.isArray(data?.result)
+      ? data.result
+      : (data?.result?.points || []);
+
+    if (items.length > 0) {
+      items.forEach((item) => {
+        const div = document.createElement("div");
+        div.className = "message bot";
+        div.innerText = "상품명: " + item.payload.name + "\n설명: " + item.payload.description + "\n가격: " + item.payload.price;
+        messagesEl.appendChild(div);
+      });
     } else {
-      text = `요청주신 정보의 상품은 없습니다.`
+      const div = document.createElement("div");
+      div.className = "message bot";
+      div.innerText = "요청주신 정보의 상품은 없습니다.";
+      messagesEl.appendChild(div);
+    }
+
+    if (data?.usage) {
+      div2.innerText = "전체: " + data.usage.total_tokens + " | 요청토큰: " + data.usage.prompt_tokens;
+      div2.style.fontSize = '9px';
+      messagesEl.appendChild(div2);
     }
   } else {
-    text = data;
-  }
-  div.innerText = text;
-  messagesEl.appendChild(div);
-  if (sender === 'bot') {
-    div2.innerText = `전체: ${data.usage.total_tokens} | 요청토큰: ${data.usage.prompt_tokens}`
-    messagesEl.appendChild(div2);
-    div2.style.fontSize = '9px';
+    const div = document.createElement("div");
+    div.className = "message " + sender;
+    div.innerText = data;
+    messagesEl.appendChild(div);
   }
 
   messagesEl.scrollTop = messagesEl.scrollHeight;
