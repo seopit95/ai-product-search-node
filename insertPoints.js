@@ -6,6 +6,8 @@ import { qdrant } from "./qdrant.js";
 import { dummyData } from "./dummyData.js";
 import OpenAI from "openai";
 import { buildDocumentText, buildSparseVector } from "./searchUtils.js";
+import { appendFile, mkdir } from "node:fs/promises";
+import path from "node:path";
 import { ocrImageUrl } from "./visionOcr.js";
 
 const client = new OpenAI({
@@ -16,6 +18,9 @@ const COLLECTION_NAME = process.env.COLLECTION_NAME || "test_products";
 const IMAGE_STRUCTURE_MODEL = "gpt-4.1-mini";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const IMAGE_EXTRACTION_CONCURRENCY = 3;
+const NORMALIZATION_DIR = path.resolve("data");
+const NORMALIZATION_CANDIDATES_FILE = path.join(NORMALIZATION_DIR, "normalization-candidates.jsonl");
+// OpenAI 사용량을 추적한다.
 const usageStats = {
   imageStructure: {
     requests: 0,
@@ -30,6 +35,7 @@ const usageStats = {
   },
 };
 
+// 토큰 사용량을 단계별로 출력한다.
 function logTokenUsage(stage, usage, extra = {}) {
   if (!usage) return;
   const inputTokens = usage.input_tokens ?? usage.prompt_tokens ?? 0;
@@ -44,6 +50,7 @@ function logTokenUsage(stage, usage, extra = {}) {
   });
 }
 
+// payload에서 이미지 URL을 찾는다.
 function getImageUrl(point) {
   return (
     point?.payload?.image_url
@@ -53,6 +60,7 @@ function getImageUrl(point) {
   );
 }
 
+// VLM 응답에서 JSON 결과를 추출한다.
 function extractJsonFromResponse(response) {
   if (response?.output_parsed) return response.output_parsed;
   if (typeof response?.output_text === "string" && response.output_text.trim()) {
@@ -72,6 +80,7 @@ function extractJsonFromResponse(response) {
   throw new Error("Failed to parse VLM JSON response");
 }
 
+// OCR 결과가 없을 때 기본 구조를 반환한다.
 function buildEmptyImageData() {
   return {
     summary: "",
@@ -82,6 +91,7 @@ function buildEmptyImageData() {
   };
 }
 
+// 이미지 URL을 OCR → 구조화 JSON으로 변환한다.
 async function extractImageData(imageUrl) {
   const ocrText = await ocrImageUrl(imageUrl);
   if (!ocrText) {
@@ -159,6 +169,7 @@ async function extractImageData(imageUrl) {
   };
 }
 
+// 이미지 구조 데이터를 검색용 텍스트로 변환한다.
 function imageDataToText(imageData) {
   if (!imageData) return "";
   const specs = Array.isArray(imageData.specs)
@@ -174,6 +185,7 @@ function imageDataToText(imageData) {
   ].join("\n");
 }
 
+// 기존 태그와 이미지 추출 태그를 병합한다.
 function mergeTags(baseTags, imageData) {
   const base = Array.isArray(baseTags) ? baseTags : [];
   const imageTags = Array.isArray(imageData?.tags) ? imageData.tags : [];
@@ -187,6 +199,7 @@ function mergeTags(baseTags, imageData) {
   );
 }
 
+// 동시성 제한을 두고 배열 작업을 수행한다.
 async function mapWithConcurrency(items, concurrency, task) {
   const out = new Array(items.length);
   let cursor = 0;
@@ -206,6 +219,53 @@ async function mapWithConcurrency(items, concurrency, task) {
   return out;
 }
 
+// 인서트 시 브랜드/카테고리 후보를 수집한다.
+async function collectNormalizationCandidates(points) {
+  const seen = new Set();
+  const lines = [];
+  const ts = new Date().toISOString();
+
+  points.forEach((point) => {
+    const payload = point?.payload || {};
+    const brand = typeof payload.brand === "string" ? payload.brand.trim() : "";
+    const category = typeof payload.category === "string" ? payload.category.trim() : "";
+
+    if (brand) {
+      const key = `brand:${brand}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        lines.push(JSON.stringify({
+          type: "brand",
+          value: brand,
+          source: "insertPoints",
+          product_id: point?.id ?? null,
+          ts,
+        }));
+      }
+    }
+
+    if (category) {
+      const key = `category:${category}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        lines.push(JSON.stringify({
+          type: "category",
+          value: category,
+          source: "insertPoints",
+          product_id: point?.id ?? null,
+          ts,
+        }));
+      }
+    }
+  });
+
+  if (!lines.length) return;
+  await mkdir(NORMALIZATION_DIR, { recursive: true });
+  await appendFile(NORMALIZATION_CANDIDATES_FILE, `${lines.join("\n")}\n`, "utf8");
+  console.log(`[normalization] candidates appended: ${lines.length}`);
+}
+
+// 포인트에 이미지 추출 데이터를 추가한다.
 async function enrichWithImageData(points) {
   const enriched = await mapWithConcurrency(points, IMAGE_EXTRACTION_CONCURRENCY, async (point, index) => {
     if (index !== 0) {
@@ -248,11 +308,13 @@ async function enrichWithImageData(points) {
   return enriched;
 }
 
+// 포인트 임베딩 생성 후 Qdrant에 저장한다.
 async function insertPoints() {
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     throw new Error("GOOGLE_APPLICATION_CREDENTIALS가 설정되지 않았습니다.");
   }
   console.log(`[start] preparing points for collection=${COLLECTION_NAME}`);
+  await collectNormalizationCandidates(dummyData);
   const sourcePoints = await enrichWithImageData(dummyData);
 
   const texts = sourcePoints.map((item) => {

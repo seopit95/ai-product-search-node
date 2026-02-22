@@ -27,6 +27,7 @@ app.use(express.json());
 // 정적 파일 제공 (public 폴더)
 app.use(express.static("public"));
 
+// 사용자 쿼리를 구조화된 검색 의도로 변환한다.
 async function analyzeQuery(userMessage) {
   const prompt = `
 너는 쇼핑몰 검색엔진의 쿼리 분석기다.
@@ -77,6 +78,7 @@ JSON 외의 말은 절대 출력하지 마라.
   return { content: JSON.parse(response.choices[0].message.content), usage: response.usage };
 }
 
+// Qdrant 필터 조건을 구성한다.
 function buildQdrantFilter(filters) {
   const must = [];
 
@@ -107,6 +109,7 @@ function buildQdrantFilter(filters) {
   return must.length > 0 ? { must } : undefined;
 }
 
+// dense + sparse 하이브리드 검색을 수행한다.
 async function searchQdrant({ denseVector, sparseVector, filters }) {
   const base = {
     limit: 5,
@@ -154,6 +157,7 @@ async function searchQdrant({ denseVector, sparseVector, filters }) {
   return runHybrid(undefined);
 }
 
+// 검색 요청 처리 엔드포인트
 app.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;

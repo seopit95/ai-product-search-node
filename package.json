@@ -8,7 +8,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "dev": "light-server -s public -p 3000",
-    "vectorDev": "node insertPoints.js"
+    "vectorDev": "node insertPoints.js",
+    "buildNormalization": "node scripts/buildNormalization.js"
   },
   "repository": {
     "type": "git",
