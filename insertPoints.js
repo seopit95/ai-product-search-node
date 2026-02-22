@@ -6,19 +6,43 @@ import { qdrant } from "./qdrant.js";
 import { dummyData } from "./dummyData.js";
 import OpenAI from "openai";
 import { buildDocumentText, buildSparseVector } from "./searchUtils.js";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { ocrImageUrl } from "./visionOcr.js";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 const COLLECTION_NAME = process.env.COLLECTION_NAME || "test_products";
-const CACHE_DIR = path.resolve(".cache");
-const CACHE_FILE = path.join(CACHE_DIR, "image-extraction-cache.json");
-const IMAGE_VLM_MODEL = "gpt-4.1-mini";
+const IMAGE_STRUCTURE_MODEL = "gpt-4.1-mini";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const IMAGE_EXTRACTION_CONCURRENCY = 3;
+const usageStats = {
+  imageStructure: {
+    requests: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+  },
+  embeddings: {
+    requests: 0,
+    input_tokens: 0,
+    total_tokens: 0,
+  },
+};
+
+function logTokenUsage(stage, usage, extra = {}) {
+  if (!usage) return;
+  const inputTokens = usage.input_tokens ?? usage.prompt_tokens ?? 0;
+  const outputTokens = usage.output_tokens ?? usage.completion_tokens ?? 0;
+  const totalTokens = usage.total_tokens ?? inputTokens + outputTokens;
+  console.log("[token usage]", {
+    stage,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    total_tokens: totalTokens,
+    ...extra,
+  });
+}
 
 function getImageUrl(point) {
   return (
@@ -27,20 +51,6 @@ function getImageUrl(point) {
     || point?.payload?.detail_image_url
     || null
   );
-}
-
-async function loadExtractionCache() {
-  try {
-    const raw = await readFile(CACHE_FILE, "utf8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-async function saveExtractionCache(cache) {
-  await mkdir(CACHE_DIR, { recursive: true });
-  await writeFile(CACHE_FILE, JSON.stringify(cache, null, 2), "utf8");
 }
 
 function extractJsonFromResponse(response) {
@@ -62,12 +72,27 @@ function extractJsonFromResponse(response) {
   throw new Error("Failed to parse VLM JSON response");
 }
 
+function buildEmptyImageData() {
+  return {
+    summary: "",
+    raw_text: "",
+    claims: [],
+    tags: [],
+    specs: [],
+  };
+}
+
 async function extractImageData(imageUrl) {
+  const ocrText = await ocrImageUrl(imageUrl);
+  if (!ocrText) {
+    return buildEmptyImageData();
+  }
+
   const response = await client.responses.create({
-    model: IMAGE_VLM_MODEL,
+    model: IMAGE_STRUCTURE_MODEL,
     instructions: [
-      "너는 상품 상세 이미지 정보 추출기다.",
-      "이미지에 보이는 내용만 JSON으로 구조화한다.",
+      "너는 상품 상세 OCR 텍스트 정보 추출기다.",
+      "입력 텍스트(OCR)에 보이는 내용만 JSON으로 구조화한다.",
       "추측 금지, 없으면 빈 문자열/빈 배열로 반환한다.",
       "검색 향상을 위한 키워드(tags), 핵심 클레임(claims), 스펙(specs), 요약(summary), 원문(raw_text)를 포함한다.",
     ].join("\n"),
@@ -75,8 +100,14 @@ async function extractImageData(imageUrl) {
       {
         role: "user",
         content: [
-          { type: "input_text", text: "상품 상세 이미지를 검색용 구조 데이터로 추출해줘." },
-          { type: "input_image", image_url: imageUrl, detail: "high" },
+          {
+            type: "input_text",
+            text: [
+              "다음은 상품 상세 이미지의 OCR 결과다. 이 텍스트만 근거로 구조화해줘.",
+              "",
+              ocrText,
+            ].join("\n"),
+          },
         ],
       },
     ],
@@ -111,7 +142,21 @@ async function extractImageData(imageUrl) {
     },
   });
 
-  return extractJsonFromResponse(response);
+  const extracted = extractJsonFromResponse(response);
+  if (response?.usage) {
+    logTokenUsage("image_structure", response.usage, {
+      imageUrl,
+      ocr_chars: ocrText.length,
+    });
+    usageStats.imageStructure.requests += 1;
+    usageStats.imageStructure.input_tokens += response.usage.input_tokens || 0;
+    usageStats.imageStructure.output_tokens += response.usage.output_tokens || 0;
+    usageStats.imageStructure.total_tokens += response.usage.total_tokens || 0;
+  }
+  return {
+    ...extracted,
+    raw_text: ocrText,
+  };
 }
 
 function imageDataToText(imageData) {
@@ -162,9 +207,6 @@ async function mapWithConcurrency(items, concurrency, task) {
 }
 
 async function enrichWithImageData(points) {
-  const cache = await loadExtractionCache();
-  let cacheChanged = false;
-
   const enriched = await mapWithConcurrency(points, IMAGE_EXTRACTION_CONCURRENCY, async (point, index) => {
     if (index !== 0) {
       if (!point?.payload) return point;
@@ -178,20 +220,14 @@ async function enrichWithImageData(points) {
     const imageUrl = getImageUrl(point);
     if (!imageUrl) return point;
 
-    let imageData = cache[imageUrl];
-    if (!imageData) {
-      try {
-        imageData = await extractImageData(imageUrl);
-        cache[imageUrl] = imageData;
-        cacheChanged = true;
-        console.log(`[image extracted] ${imageUrl}`);
-      } catch (error) {
-        console.warn(`[image extract skipped] ${imageUrl}`);
-        console.warn(error?.message || error);
-        return point;
-      }
-    } else {
-      console.log(`[image cache hit] ${imageUrl}`);
+    let imageData;
+    try {
+      imageData = await extractImageData(imageUrl);
+      console.log(`[image extracted] ${imageUrl}`);
+    } catch (error) {
+      console.warn(`[image extract skipped] ${imageUrl}`);
+      console.warn(error?.message || error);
+      return point;
     }
 
     return {
@@ -209,14 +245,13 @@ async function enrichWithImageData(points) {
     };
   });
 
-  if (cacheChanged) {
-    await saveExtractionCache(cache);
-  }
-
   return enriched;
 }
 
 async function insertPoints() {
+  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    throw new Error("GOOGLE_APPLICATION_CREDENTIALS가 설정되지 않았습니다.");
+  }
   console.log(`[start] preparing points for collection=${COLLECTION_NAME}`);
   const sourcePoints = await enrichWithImageData(dummyData);
 
@@ -234,6 +269,14 @@ async function insertPoints() {
       model: EMBEDDING_MODEL,
       input: texts,
     });
+    if (embeddings?.usage) {
+      logTokenUsage("embeddings", embeddings.usage, {
+        items: texts.length,
+      });
+      usageStats.embeddings.requests += 1;
+      usageStats.embeddings.input_tokens += embeddings.usage.prompt_tokens || 0;
+      usageStats.embeddings.total_tokens += embeddings.usage.total_tokens || 0;
+    }
 
     pointsToUpsert = sourcePoints.map((data, idx) => {
       const dense = embeddings.data[idx].embedding;

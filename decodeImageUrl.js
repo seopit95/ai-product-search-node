@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import OpenAI from "openai";
 import { qdrant } from "./qdrant.js";
 import { buildSparseVector } from "./searchUtils.js";
+import { ocrImageUrl } from "./visionOcr.js";
 
 dotenv.config();
 
@@ -11,7 +12,7 @@ const client = new OpenAI({
 
 const COLLECTION_NAME = "product_detail_images";
 const DENSE_MODEL = "text-embedding-3-small";
-const VLM_MODEL = "gpt-4.1-mini";
+const STRUCTURE_MODEL = "gpt-4.1-mini";
 
 // 예시 이미지 URL (원하는 URL로 교체 가능)
 const imageUrl = "https://locknlock2.cdn-nhncommerce.com/data/editor/goods/HFL101_8.jpg";
@@ -101,12 +102,36 @@ function extractJsonFromResponse(response) {
   throw new Error("VLM 응답에서 JSON을 파싱할 수 없습니다.");
 }
 
+function buildEmptyExtraction() {
+  return {
+    product_name: "",
+    brand: "",
+    category: "",
+    summary: "",
+    raw_text: "",
+    claims: [],
+    specs: [],
+    size_table: [],
+    shipping: [],
+    promo: [],
+    warnings: [],
+    price_texts: [],
+    tags: [],
+    language: "",
+  };
+}
+
 async function extractProductDataFromImage(imageUrlInput) {
+  const ocrText = await ocrImageUrl(imageUrlInput);
+  if (!ocrText) {
+    return buildEmptyExtraction();
+  }
+
   const instructions = `
-너는 쇼핑몰 상품 상세 이미지 OCR/구조화 추출기다.
+너는 쇼핑몰 상품 상세 OCR 텍스트 구조화 추출기다.
 반드시 JSON만 출력한다.
 규칙:
-- 이미지에서 보이는 정보만 추출한다. 추측 금지.
+- 입력 텍스트(OCR)에서 보이는 정보만 추출한다. 추측 금지.
 - 문자열이 없으면 빈 문자열, 목록이 없으면 빈 배열.
 - specs는 핵심 스펙(용량/재질/구성/사이즈/원산지/제조사 등)을 name-value로 정리.
 - shipping/promo/warnings/claims는 성격에 맞게 분류.
@@ -114,14 +139,20 @@ async function extractProductDataFromImage(imageUrlInput) {
   `.trim();
 
   const response = await client.responses.create({
-    model: VLM_MODEL,
+    model: STRUCTURE_MODEL,
     instructions,
     input: [
       {
         role: "user",
         content: [
-          { type: "input_text", text: "이 상품상세 이미지를 구조화해줘." },
-          { type: "input_image", image_url: imageUrlInput, detail: "high" },
+          {
+            type: "input_text",
+            text: [
+              "다음은 상품 상세 이미지의 OCR 결과다. 이 텍스트만 근거로 구조화해줘.",
+              "",
+              ocrText,
+            ].join("\n"),
+          },
         ],
       },
     ],
@@ -134,7 +165,11 @@ async function extractProductDataFromImage(imageUrlInput) {
     },
   });
 
-  return extractJsonFromResponse(response);
+  const extracted = extractJsonFromResponse(response);
+  return {
+    ...extracted,
+    raw_text: ocrText,
+  };
 }
 
 function buildSearchableDocument(extracted, imageUrlInput) {
@@ -237,6 +272,9 @@ async function saveToVectorDb({ imageUrlInput, extracted, searchableText }) {
 async function main() {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY가 설정되지 않았습니다.");
+  }
+  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    throw new Error("GOOGLE_APPLICATION_CREDENTIALS가 설정되지 않았습니다.");
   }
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL이 설정되지 않았습니다.");
