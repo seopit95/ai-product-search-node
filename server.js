@@ -6,6 +6,7 @@ import express from "express";
 import cors from "cors";
 import OpenAI from "openai";
 import { qdrant } from "./qdrant.js";
+import { chatPolicy } from "./config/chatPolicy.js";
 import {
   buildQueryText,
   buildSparseVector,
@@ -40,14 +41,12 @@ function pushHistory(session, role, content) {
 
 function isProductSearchMessage(message) {
   const text = String(message || "").toLowerCase();
-  const keywords = ["추천", "찾아", "검색", "어떤 제품", "무슨 제품", "영양제", "상품", "있어", "파는", "구매", "살만한"];
-  return keywords.some((k) => text.includes(k));
+  return chatPolicy.intent.productSearchKeywords.some((k) => text.includes(k));
 }
 
 function isFollowupEffectQuestion(message) {
   const text = String(message || "").toLowerCase();
-  const keywords = ["효능", "부작용", "주의", "상호작용", "대상", "누가", "먹어도", "먹으면", "필요", "도움"];
-  return keywords.some((k) => text.includes(k));
+  return chatPolicy.intent.followupKeywords.some((k) => text.includes(k));
 }
 
 function isFollowupQuestion(message) {
@@ -64,37 +63,23 @@ function findReferencedProduct(message, results) {
 }
 
 function buildNeedQuestion(stage) {
-  if (stage === 1) {
-    return "어떤 목적/증상이 있으신가요? (예: 피로, 면역, 장건강, 혈당, 수면)";
-  }
-  return "주의하실 점이 있을까요? (임신/수유, 지병, 복용 중인 약, 알레르기, 예산 등)";
+  if (stage === 1) return chatPolicy.questions.needStage1;
+  return chatPolicy.questions.needStage2;
 }
 
 function isNegativeAnswer(text) {
   const raw = String(text || "").toLowerCase().trim();
-  const negatives = ["아니", "아니요", "없어", "없어요", "없음", "괜찮아", "괜찮아요", "무", "무관"];
-  return negatives.some((v) => raw === v || raw.includes(v));
+  return chatPolicy.intent.negativeAnswers.some((v) => raw === v || raw.includes(v));
 }
 
 function hasNeedKeywords(text) {
   const raw = String(text || "").toLowerCase();
-  const keywords = ["피로", "면역", "장", "혈당", "혈압", "수면", "눈", "관절", "간", "위", "스트레스", "기억", "집중"];
-  return keywords.some((k) => raw.includes(k));
+  return chatPolicy.intent.needKeywords.some((k) => raw.includes(k));
 }
 
 function extractCautionKeywords(text) {
   const raw = String(text || "").toLowerCase();
-  const keywords = [
-    "임신", "수유", "임산부", "수유부",
-    "어린이", "소아", "청소년",
-    "간질환", "간", "신장", "신장질환",
-    "당뇨", "혈당", "고혈압", "심장", "심혈관",
-    "항응고", "혈액", "혈전",
-    "알레르기", "과민",
-    "항생제", "항우울", "스테로이드", "면역억제",
-    "약", "복용",
-  ];
-  return keywords.filter((k) => raw.includes(k));
+  return chatPolicy.caution.keywords.filter((k) => raw.includes(k));
 }
 
 function isHighRiskForProduct(payload, cautionKeywords) {
@@ -111,30 +96,18 @@ function buildNoRecommendationMessage(cautionKeywords) {
   const hasChild = cautionKeywords.some((k) => ["어린이", "소아", "청소년"].includes(k));
 
   if (hasPregnancy) {
-    return [
-      "임신 중에는 일부 건강기능식품이 태아에 영향을 줄 수 있어 조금 더 신중하게 확인하는 게 좋아요.",
-      "문의하신 성분은 임산부 대상 안전성 근거가 충분하지 않은 편이라",
-      "전문의와 상담 후 복용 여부를 결정하시는 것을 권장드립니다.",
-    ].join("\n");
+    return chatPolicy.caution.messages.pregnancy;
   }
 
   if (hasBreastfeeding) {
-    return [
-      "수유 중에는 일부 성분이 모유를 통해 전달될 수 있어 조금 더 주의가 필요해요.",
-      "문의하신 성분은 수유부 대상 안전성 근거가 충분하지 않을 수 있어",
-      "전문의와 상담 후 복용 여부를 결정하시는 것을 권장드립니다.",
-    ].join("\n");
+    return chatPolicy.caution.messages.breastfeeding;
   }
 
   if (hasChild) {
-    return [
-      "어린이/청소년은 성장 단계라 성분에 대한 민감도가 높을 수 있어요.",
-      "문의하신 성분은 해당 연령대 안전성 근거가 충분하지 않을 수 있어",
-      "전문의와 상담 후 복용 여부를 결정하시는 것을 권장드립니다.",
-    ].join("\n");
+    return chatPolicy.caution.messages.child;
   }
 
-  return "주의 대상에 해당하는 성분이 많아 지금은 안전하게 추천드릴 제품이 없어요. 의료 전문가와 상담 후 결정하시는 것을 권장드립니다.";
+  return chatPolicy.caution.messages.default;
 }
 
 // OpenAI 클라이언트 (서버에서만!)
@@ -287,7 +260,7 @@ app.post("/chat", async (req, res) => {
 
     if (session?.needStage === 1) {
       if (isNegativeAnswer(message)) {
-        return res.json({ mode: "answer", text: "원하시는 목적이나 증상을 간단히 알려주시면 그에 맞게 추천드릴게요." });
+        return res.json({ mode: "answer", text: chatPolicy.responses.needOnlyPrompt });
       }
       session.pendingNeedMessage = message;
       session.needStage = 2;
@@ -324,7 +297,7 @@ app.post("/chat", async (req, res) => {
         session.lastResults = [];
         return res.json({
           mode: "answer",
-          text: "조건에 맞는 상품을 찾지 못했어요. 목적이나 조건을 조금만 바꿔서 알려주시면 다시 찾아드릴게요.",
+          text: chatPolicy.responses.noResults,
         });
       }
 
@@ -333,7 +306,7 @@ app.post("/chat", async (req, res) => {
         session.lastResults = [];
         const text = cautionKeywords.length
           ? buildNoRecommendationMessage(cautionKeywords)
-          : "조건에 맞는 상품을 찾지 못했어요. 목적이나 조건을 조금만 바꿔서 알려주시면 다시 찾아드릴게요.";
+          : chatPolicy.responses.noResults;
         return res.json({
           mode: "answer",
           text,
@@ -359,7 +332,7 @@ app.post("/chat", async (req, res) => {
       if (isFollowupEffectQuestion(message) && hasLastResults) {
         const target = findReferencedProduct(message, session.lastResults);
         if (!target) {
-          return res.json({ mode: "answer", text: "어떤 상품을 기준으로 설명해드릴까요? 상품명을 알려주시면 도와드릴게요." });
+          return res.json({ mode: "answer", text: chatPolicy.responses.askProductName });
         }
 
         const payload = target.payload || {};
@@ -389,10 +362,10 @@ app.post("/chat", async (req, res) => {
       }
 
       if (isFollowupEffectQuestion(message) && !hasLastResults) {
-        return res.json({ mode: "answer", text: "추천을 원하시면 어떤 목적/증상인지 알려주세요. 그에 맞게 도와드릴게요." });
+        return res.json({ mode: "answer", text: chatPolicy.responses.needMissing });
       }
 
-      return res.json({ mode: "answer", text: "제품 추천을 원하시면 원하는 효능이나 목적을 알려주세요. 그에 맞게 찾아드릴게요." });
+      return res.json({ mode: "answer", text: chatPolicy.responses.recommendPrompt });
     }
 
     if (isProductSearchMessage(message)) {
@@ -433,7 +406,7 @@ app.post("/chat", async (req, res) => {
     if (!result?.length) {
       return res.json({
         mode: "answer",
-        text: "조건에 맞는 상품을 찾지 못했어요. 목적이나 조건을 조금만 바꿔서 알려주시면 다시 찾아드릴게요.",
+        text: chatPolicy.responses.noResults,
       });
     }
 
