@@ -223,13 +223,20 @@ ${price}
 
 // 임베딩/sparse 검색에 사용할 문서 텍스트를 만든다
 function buildDocumentText(item) {
+  const detailImageText = item?.payload?.detail_image_text || "";
   return `
 상품명: ${item.payload.name}
 브랜드: ${item.payload.brand}
 카테고리: ${item.payload.category}
 가격: ${item.payload.price}
 설명: ${item.payload.description}
-태그: ${item.payload.tags.join(" ")}
+대표성분: ${item.payload.primary_ingredient || ""}
+효능요약: ${item.payload.effects_summary || ""}
+부수효능: ${(item.payload.secondary_benefits || []).join(" ")}
+추천대상: ${(item.payload.recommended_for || []).join(" ")}
+비추천대상: ${(item.payload.not_recommended_for || []).join(" ")}
+주의사항: ${item.payload.notes || ""}
+상세이미지텍스트: ${detailImageText}
   `.trim();
 }
 

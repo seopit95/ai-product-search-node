@@ -8,16 +8,74 @@ messagesEl.appendChild(initChatDiv);
 function addMessage(data, sender) {
   const div2 = document.createElement("div");
   if (sender === 'bot') {
+    if (data?.mode === "answer" && typeof data?.text === "string") {
+      const div = document.createElement("div");
+      div.className = "message bot";
+      div.innerText = data.text;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return;
+    }
+
     const items = Array.isArray(data?.result)
       ? data.result
       : (data?.result?.points || []);
 
     if (items.length > 0) {
       items.forEach((item) => {
-        const div = document.createElement("div");
-        div.className = "message bot";
-        div.innerText = "상품명: " + item.payload.name + "\n설명: " + item.payload.description + "\n가격: " + item.payload.price;
-        messagesEl.appendChild(div);
+        const payload = item.payload || {};
+        const goodsNo = payload.goods_no || item.id || "";
+        const link = goodsNo
+          ? `https://www.esthermall.co.kr/goods/goods_view.php?goodsNo=${goodsNo}`
+          : null;
+
+        const card = document.createElement("div");
+        card.className = "message bot";
+
+        const a = document.createElement("a");
+        if (link) {
+          a.href = link;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+        }
+        a.style.display = "flex";
+        a.style.gap = "8px";
+        a.style.textDecoration = "none";
+        a.style.color = "inherit";
+        a.style.alignItems = "center";
+
+        const img = document.createElement("img");
+        img.src = payload.image_url || "";
+        img.alt = payload.name || "상품 이미지";
+        img.style.width = "48px";
+        img.style.height = "48px";
+        img.style.objectFit = "cover";
+        img.style.borderRadius = "8px";
+        img.loading = "lazy";
+
+        const info = document.createElement("div");
+        info.style.flex = "1";
+        info.style.minWidth = "0";
+
+        const title = document.createElement("div");
+        title.style.fontWeight = "600";
+        title.style.whiteSpace = "nowrap";
+        title.style.overflow = "hidden";
+        title.style.textOverflow = "ellipsis";
+        title.innerText = payload.name || "상품명 없음";
+        info.appendChild(title);
+        a.appendChild(img);
+        a.appendChild(info);
+        card.appendChild(a);
+
+        const summary = document.createElement("div");
+        summary.style.fontSize = "12px";
+        summary.style.marginTop = "6px";
+        summary.style.opacity = "0.9";
+        summary.innerText = payload.effects_summary || "효능 요약 정보 없음";
+
+        card.appendChild(summary);
+        messagesEl.appendChild(card);
       });
     } else {
       const div = document.createElement("div");
@@ -50,12 +108,13 @@ async function sendMessage() {
   sendBtn.disabled = true;
 
   try {
+    const sessionId = getSessionId();
     const res = await fetch("/chat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ message: text, sessionId }),
     });
     document.querySelector('.reply_wait').remove();
 
@@ -69,7 +128,18 @@ async function sendMessage() {
 }
 
 inputEl.addEventListener("keydown", handleEnter);
-sendBtn.addEventListener("click", handleEnter);
+sendBtn.addEventListener("click", (e) => {
+  e.preventDefault();
+  sendMessage();
+  sendBtn.disabled = true;
+
+  // 응답 중 표시
+  const loadingDiv = document.createElement("div");
+  loadingDiv.className = "message reply_wait";
+  loadingDiv.innerText = "응답 중…";
+  messagesEl.appendChild(loadingDiv);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+});
 
 function handleEnter(e) {
   if (e.isComposing) return;
@@ -84,6 +154,16 @@ function handleEnter(e) {
     messagesEl.appendChild(loadingDiv);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
+}
+
+function getSessionId() {
+  const key = "chat_session_id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = `session_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(key, id);
+  }
+  return id;
 }
 const toggleBtn = document.getElementById('chatbot-toggle');
 const chatbot = document.getElementById('chatbot');

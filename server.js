@@ -15,6 +15,127 @@ import {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const sessionStore = new Map();
+
+function getSession(sessionId) {
+  if (!sessionId) return null;
+  if (!sessionStore.has(sessionId)) {
+    sessionStore.set(sessionId, {
+      history: [],
+      lastResults: [],
+      needStage: 0,
+      pendingNeedMessage: "",
+    });
+  }
+  return sessionStore.get(sessionId);
+}
+
+function pushHistory(session, role, content) {
+  if (!session) return;
+  session.history.push({ role, content, ts: new Date().toISOString() });
+  if (session.history.length > 20) {
+    session.history = session.history.slice(-20);
+  }
+}
+
+function isProductSearchMessage(message) {
+  const text = String(message || "").toLowerCase();
+  const keywords = ["추천", "찾아", "검색", "어떤 제품", "무슨 제품", "영양제", "상품", "있어", "파는", "구매", "살만한"];
+  return keywords.some((k) => text.includes(k));
+}
+
+function isFollowupEffectQuestion(message) {
+  const text = String(message || "").toLowerCase();
+  const keywords = ["효능", "부작용", "주의", "상호작용", "대상", "누가", "먹어도", "먹으면", "필요", "도움"];
+  return keywords.some((k) => text.includes(k));
+}
+
+function isFollowupQuestion(message) {
+  return isFollowupEffectQuestion(message);
+}
+
+function findReferencedProduct(message, results) {
+  const text = String(message || "").toLowerCase();
+  for (const item of results) {
+    const name = String(item?.payload?.name || "").toLowerCase();
+    if (name && text.includes(name)) return item;
+  }
+  return results[0] || null;
+}
+
+function buildNeedQuestion(stage) {
+  if (stage === 1) {
+    return "어떤 목적/증상이 있으신가요? (예: 피로, 면역, 장건강, 혈당, 수면)";
+  }
+  return "주의하실 점이 있을까요? (임신/수유, 지병, 복용 중인 약, 알레르기, 예산 등)";
+}
+
+function isNegativeAnswer(text) {
+  const raw = String(text || "").toLowerCase().trim();
+  const negatives = ["아니", "아니요", "없어", "없어요", "없음", "괜찮아", "괜찮아요", "무", "무관"];
+  return negatives.some((v) => raw === v || raw.includes(v));
+}
+
+function hasNeedKeywords(text) {
+  const raw = String(text || "").toLowerCase();
+  const keywords = ["피로", "면역", "장", "혈당", "혈압", "수면", "눈", "관절", "간", "위", "스트레스", "기억", "집중"];
+  return keywords.some((k) => raw.includes(k));
+}
+
+function extractCautionKeywords(text) {
+  const raw = String(text || "").toLowerCase();
+  const keywords = [
+    "임신", "수유", "임산부", "수유부",
+    "어린이", "소아", "청소년",
+    "간질환", "간", "신장", "신장질환",
+    "당뇨", "혈당", "고혈압", "심장", "심혈관",
+    "항응고", "혈액", "혈전",
+    "알레르기", "과민",
+    "항생제", "항우울", "스테로이드", "면역억제",
+    "약", "복용",
+  ];
+  return keywords.filter((k) => raw.includes(k));
+}
+
+function isHighRiskForProduct(payload, cautionKeywords) {
+  if (!cautionKeywords?.length) return false;
+  const list = Array.isArray(payload?.not_recommended_for) ? payload.not_recommended_for : [];
+  if (!list.length) return false;
+  const text = list.join(" ").toLowerCase();
+  return cautionKeywords.some((k) => text.includes(k));
+}
+
+function buildNoRecommendationMessage(cautionKeywords) {
+  const hasPregnancy = cautionKeywords.some((k) => ["임신", "임산부"].includes(k));
+  const hasBreastfeeding = cautionKeywords.some((k) => ["수유", "수유부"].includes(k));
+  const hasChild = cautionKeywords.some((k) => ["어린이", "소아", "청소년"].includes(k));
+
+  if (hasPregnancy) {
+    return [
+      "임신 중에는 일부 건강기능식품이 태아에 영향을 줄 수 있어 조금 더 신중하게 확인하는 게 좋아요.",
+      "문의하신 성분은 임산부 대상 안전성 근거가 충분하지 않은 편이라",
+      "전문의와 상담 후 복용 여부를 결정하시는 것을 권장드립니다.",
+    ].join("\n");
+  }
+
+  if (hasBreastfeeding) {
+    return [
+      "수유 중에는 일부 성분이 모유를 통해 전달될 수 있어 조금 더 주의가 필요해요.",
+      "문의하신 성분은 수유부 대상 안전성 근거가 충분하지 않을 수 있어",
+      "전문의와 상담 후 복용 여부를 결정하시는 것을 권장드립니다.",
+    ].join("\n");
+  }
+
+  if (hasChild) {
+    return [
+      "어린이/청소년은 성장 단계라 성분에 대한 민감도가 높을 수 있어요.",
+      "문의하신 성분은 해당 연령대 안전성 근거가 충분하지 않을 수 있어",
+      "전문의와 상담 후 복용 여부를 결정하시는 것을 권장드립니다.",
+    ].join("\n");
+  }
+
+  return "주의 대상에 해당하는 성분이 많아 지금은 안전하게 추천드릴 제품이 없어요. 의료 전문가와 상담 후 결정하시는 것을 권장드립니다.";
+}
 
 // OpenAI 클라이언트 (서버에서만!)
 const client = new OpenAI({
@@ -160,7 +281,131 @@ async function searchQdrant({ denseVector, sparseVector, filters }) {
 // 검색 요청 처리 엔드포인트
 app.post("/chat", async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, sessionId } = req.body;
+    const session = getSession(sessionId);
+    pushHistory(session, "user", message);
+
+    if (session?.needStage === 1) {
+      if (isNegativeAnswer(message)) {
+        return res.json({ mode: "answer", text: "원하시는 목적이나 증상을 간단히 알려주시면 그에 맞게 추천드릴게요." });
+      }
+      session.pendingNeedMessage = message;
+      session.needStage = 2;
+      return res.json({ mode: "answer", text: buildNeedQuestion(2) });
+    }
+
+    if (session?.needStage === 2) {
+      const combined = [session.pendingNeedMessage, message].filter(Boolean).join("\n");
+      session.needStage = 0;
+      session.pendingNeedMessage = "";
+      const cautionKeywords = extractCautionKeywords(combined);
+      const { content: analyzed, usage } = await analyzeQuery(combined);
+      const { semantic_query } = analyzed;
+      const filters = {
+        ...analyzed.filters,
+        brand: normalizeBrand(analyzed.filters?.brand),
+        category: normalizeCategory(analyzed.filters?.category),
+      };
+
+      const queryText = buildQueryText({ semantic_query, filters, userMessage: combined });
+      const embedding = await client.embeddings.create({
+        model: "text-embedding-3-small",
+        input: queryText,
+      });
+      const sparseVector = buildSparseVector(queryText);
+
+      const result = await searchQdrant({
+        denseVector: embedding.data[0].embedding,
+        sparseVector,
+        filters,
+      });
+
+      if (!result?.length) {
+        session.lastResults = [];
+        return res.json({
+          mode: "answer",
+          text: "조건에 맞는 상품을 찾지 못했어요. 목적이나 조건을 조금만 바꿔서 알려주시면 다시 찾아드릴게요.",
+        });
+      }
+
+      const safeResults = (result || []).filter((item) => !isHighRiskForProduct(item?.payload, cautionKeywords));
+      if (!safeResults.length) {
+        session.lastResults = [];
+        const text = cautionKeywords.length
+          ? buildNoRecommendationMessage(cautionKeywords)
+          : "조건에 맞는 상품을 찾지 못했어요. 목적이나 조건을 조금만 바꿔서 알려주시면 다시 찾아드릴게요.";
+        return res.json({
+          mode: "answer",
+          text,
+        });
+      }
+
+      if (session) {
+        session.lastResults = safeResults || [];
+      }
+      pushHistory(session, "assistant", `검색 결과 ${safeResults?.length || 0}건`);
+      return res.json({
+        analyzed,
+        result: safeResults,
+        usage: embedding.usage
+      });
+    }
+
+    const hasLastResults = session?.lastResults?.length;
+    const isProductIntent = isProductSearchMessage(message);
+    const isFollowup = isFollowupQuestion(message);
+
+    if (!isProductIntent || isFollowup) {
+      if (isFollowupEffectQuestion(message) && hasLastResults) {
+        const target = findReferencedProduct(message, session.lastResults);
+        if (!target) {
+          return res.json({ mode: "answer", text: "어떤 상품을 기준으로 설명해드릴까요? 상품명을 알려주시면 도와드릴게요." });
+        }
+
+        const payload = target.payload || {};
+        const secondary = Array.isArray(payload.secondary_benefits) ? payload.secondary_benefits : [];
+        const recommended = Array.isArray(payload.recommended_for) ? payload.recommended_for : [];
+        const lines = [];
+        lines.push(`"${payload.name || "이 상품"}" 기준으로 추가 효능과 추천 대상 정보를 정리해드릴게요.`);
+        if (secondary.length) {
+          lines.push(`부수 효능: ${secondary.slice(0, 5).join(", ")}`);
+        } else {
+          lines.push("부수 효능 정보는 아직 부족해요.");
+        }
+        if (recommended.length) {
+          lines.push(`추천 대상: ${recommended.slice(0, 5).join(", ")}`);
+        } else {
+          lines.push("추천 대상 정보는 아직 부족해요.");
+        }
+        const answerText = lines.join("\n");
+        pushHistory(session, "assistant", answerText);
+        return res.json({ mode: "answer", text: answerText });
+      }
+
+      if (isFollowupEffectQuestion(message) && !hasLastResults && isProductIntent) {
+        session.needStage = 1;
+        session.pendingNeedMessage = message;
+        return res.json({ mode: "answer", text: buildNeedQuestion(1) });
+      }
+
+      if (isFollowupEffectQuestion(message) && !hasLastResults) {
+        return res.json({ mode: "answer", text: "추천을 원하시면 어떤 목적/증상인지 알려주세요. 그에 맞게 도와드릴게요." });
+      }
+
+      return res.json({ mode: "answer", text: "제품 추천을 원하시면 원하는 효능이나 목적을 알려주세요. 그에 맞게 찾아드릴게요." });
+    }
+
+    if (isProductSearchMessage(message)) {
+      if (hasNeedKeywords(message)) {
+        session.needStage = 2;
+        session.pendingNeedMessage = message;
+        return res.json({ mode: "answer", text: buildNeedQuestion(2) });
+      }
+      session.needStage = 1;
+      session.pendingNeedMessage = message;
+      return res.json({ mode: "answer", text: buildNeedQuestion(1) });
+    }
+
     // 1. 니즈 분석
     const { content: analyzed, usage } = await analyzeQuery(message);
     const { semantic_query } = analyzed;
@@ -185,6 +430,17 @@ app.post("/chat", async (req, res) => {
       filters,
     });
 
+    if (!result?.length) {
+      return res.json({
+        mode: "answer",
+        text: "조건에 맞는 상품을 찾지 못했어요. 목적이나 조건을 조금만 바꿔서 알려주시면 다시 찾아드릴게요.",
+      });
+    }
+
+    if (session) {
+      session.lastResults = result || [];
+    }
+    pushHistory(session, "assistant", `검색 결과 ${result?.length || 0}건`);
     res.json({
       analyzed,
       result: result,
