@@ -1,9 +1,10 @@
 const messagesEl = document.getElementById("messages");
 const inputEl = document.getElementById("messageInput");
 const sendBtn = document.getElementById("sendBtn");
+const API_BASE = window.__API_BASE__ || "http://localhost:3001";
 const initChatDiv = document.createElement("div");
 initChatDiv.className = 'message bot';
-initChatDiv.innerText = '뭐 찾아줄까?';
+initChatDiv.innerText = '안녕하세요.😊\n어떤 도움이 필요하신가요?';
 messagesEl.appendChild(initChatDiv);
 function addMessage(data, sender) {
   const div2 = document.createElement("div");
@@ -109,7 +110,7 @@ async function sendMessage() {
 
   try {
     const sessionId = getSessionId();
-    const res = await fetch("/chat", {
+    const res = await fetch(`/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

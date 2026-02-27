@@ -1,34 +1,17 @@
 {
   "name": "ai-product-search-node",
   "version": "1.0.0",
-  "description": "",
+  "description": "Frontend client for ai-product-search-api",
   "main": "public/index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js",
-    "dev": "light-server -s public -p 3000",
-    "vectorDev": "node insertPoints.js",
-    "buildNormalization": "node scripts/buildNormalization.js"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/seopit95/ai-product-search-node.git"
+    "start": "light-server -s public -p 3000",
+    "dev": "light-server -s public -p 3000"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/seopit95/ai-product-search-node/issues"
-  },
-  "homepage": "https://github.com/seopit95/ai-product-search-node#readme",
-  "dependencies": {
-    "@google-cloud/vision": "^5.3.4",
-    "@qdrant/js-client-rest": "^1.16.2",
-    "codex": "^0.2.3",
-    "cors": "^2.8.6",
-    "dotenv": "^17.2.3",
-    "express": "^5.2.1",
-    "openai": "^6.16.0"
+  "devDependencies": {
+    "light-server": "^2.9.1"
   }
 }
